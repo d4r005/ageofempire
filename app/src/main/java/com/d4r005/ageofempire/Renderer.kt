@@ -36,23 +36,23 @@ class Renderer(private val context: Context, private val state: GameState) {
         return BitmapFactory.decodeResource(context.resources, resId)
     }
 
-    private val tileGrass = loadBitmap("tile_grass")
-    private val tileSand = loadBitmap("tile_sand")
-    private val tileWater = loadBitmap("tile_water")
+    private val tileGrass by lazy { loadBitmap("tile_grass") }
+    private val tileSand by lazy { loadBitmap("tile_sand") }
+    private val tileWater by lazy { loadBitmap("tile_water") }
 
-    private val bmpTree = loadBitmap("sprite_tree")
-    private val bmpGold = loadBitmap("sprite_gold_mine")
-    private val bmpStone = loadBitmap("sprite_stone_mine")
-    private val bmpBerry = loadBitmap("sprite_berry_bush")
+    private val bmpTree by lazy { loadBitmap("sprite_tree") }
+    private val bmpGold by lazy { loadBitmap("sprite_gold_mine") }
+    private val bmpStone by lazy { loadBitmap("sprite_stone_mine") }
+    private val bmpBerry by lazy { loadBitmap("sprite_berry_bush") }
 
-    private val bmpTownCenter = loadBitmap("sprite_town_center")
-    private val bmpHouse = loadBitmap("sprite_house")
-    private val bmpBarracks = loadBitmap("sprite_barracks")
+    private val bmpTownCenter by lazy { loadBitmap("sprite_town_center") }
+    private val bmpHouse by lazy { loadBitmap("sprite_house") }
+    private val bmpBarracks by lazy { loadBitmap("sprite_barracks") }
 
-    private val bmpVillagerBlue = loadBitmap("sprite_villager_blue")
-    private val bmpVillagerRed = loadBitmap("sprite_villager_red")
-    private val bmpMilitiaBlue = loadBitmap("sprite_militia_blue")
-    private val bmpMilitiaRed = loadBitmap("sprite_militia_red")
+    private val bmpVillagerBlue by lazy { loadBitmap("sprite_villager_blue") }
+    private val bmpVillagerRed by lazy { loadBitmap("sprite_villager_red") }
+    private val bmpMilitiaBlue by lazy { loadBitmap("sprite_militia_blue") }
+    private val bmpMilitiaRed by lazy { loadBitmap("sprite_militia_red") }
 
     private val srcRectCache = Rect()
     private val dstRectF = RectF()
