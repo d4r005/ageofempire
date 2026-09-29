@@ -2,9 +2,12 @@
 
 Un juego de estrategia en tiempo real (RTS) para Android inspirado en Age of Empires, escrito 100% en Kotlin nativo, sin dependencias externas.
 
-## Estado: v0.1.0 — prototipo jugable
+## Estado: v0.2.0 — arte real + orientación vertical
 
-- Mapa de tiles generado aleatoriamente (pasto, agua, arena) de 64×48
+- Mapa de tiles generado aleatoriamente (pasto, agua, arena) de 64×48, ahora con **texturas reales** en lugar de colores planos
+- Edificios, unidades y recursos con **sprites ilustrados** estilo Age of Empires 2 (centro urbano, casa, cuartel, aldeano, milicia, árbol, mina de oro, mina de piedra, arbusto de bayas)
+- Estandarte de color por equipo sobre los edificios y sombra de contacto bajo las unidades
+- **Orientación vertical (portrait)** — pensado para jugar con una mano
 - 4 recursos: madera, comida, oro y piedra
 - Aldeanos que recolectan, acarrean y depositan en el centro urbano
 - Construcción de casas (+población) y cuarteles (milicia)
@@ -45,7 +48,9 @@ Instala la APK en tu teléfono o usa un emulador.
 
 ## Hoja de ruta
 
-- [ ] Sprites y animaciones en lugar de figuras geométricas
+- [x] Sprites ilustrados para edificios, unidades y recursos
+- [x] Orientación vertical
+- [ ] Animaciones (caminar, recolectar, atacar) en lugar de sprite estático
 - [ ] Sonido y música
 - [ ] Más edificios (molino, granja, murallas, torres)
 - [ ] Más unidades (arqueros, caballería)
@@ -65,7 +70,10 @@ app/src/main/java/com/d4r005/ageofempire/
 ├── GameState.kt       — simulación: unidades, edificios, recursos, IA, comandos
 ├── GameDef.kt        — constantes de balance (costes, tiempos, población)
 ├── Camera.kt          — transformación mundo↔pantalla
-├── Renderer.kt        — dibujo del terreno y entidades
+├── Renderer.kt        — dibujo del terreno y entidades con sprites (bitmaps)
 ├── Hud.kt             — barra de recursos, botones contextuales, mensajes
 └── Entities.kt        — entidades y enums del juego
+
+app/src/main/res/drawable/
+└── tile_*.png, sprite_*.png — texturas y sprites del juego (arte generado)
 ```

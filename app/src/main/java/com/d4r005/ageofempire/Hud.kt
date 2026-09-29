@@ -18,9 +18,9 @@ class Hud(private val state: GameState) {
         const val A_CANCEL = 6
 
         const val TOP_BAR_H = 64f
-        const val BTN_W = 240f
+        const val BTN_W = 196f
         const val BTN_H = 72f
-        const val BTN_GAP = 24f
+        const val BTN_GAP = 14f
         const val BTN_BOTTOM = 24f
     }
 
@@ -78,11 +78,11 @@ class Hud(private val state: GameState) {
         )
         for ((color, value, _) in items) {
             paint.color = color
-            canvas.drawRect(x, cy - 14f, x + 28f, cy + 14f, paint)
+            canvas.drawRect(x, cy - 13f, x + 24f, cy + 13f, paint)
             textPaint.textAlign = Paint.Align.LEFT
             paint.color = Color.WHITE
-            canvas.drawText(value.toString(), x + 40f, cy + 10f, textPaint)
-            x += 40f + textPaint.measureText(value.toString()) + 40f
+            canvas.drawText(value.toString(), x + 30f, cy + 9f, textPaint)
+            x += 26f + textPaint.measureText(value.toString()) + 26f
         }
         // Población
         val pop = "${state.popCount(Team.PLAYER)}/${state.popCap(Team.PLAYER)}"

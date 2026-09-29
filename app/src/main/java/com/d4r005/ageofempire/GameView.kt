@@ -11,7 +11,7 @@ import kotlin.math.sqrt
 class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
 
     val state = GameState()
-    private val renderer = Renderer(state)
+    private val renderer = Renderer(context, state)
     private val hud = Hud(state)
     private var thread: GameThread? = null
 
