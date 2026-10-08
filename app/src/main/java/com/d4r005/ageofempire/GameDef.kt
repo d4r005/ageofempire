@@ -28,10 +28,22 @@ object GameDef {
     const val TOWER_COOLDOWN = 1.2f
     val VILLAGER_COST: Map<ResourceType, Int> = mapOf(ResourceType.FOOD to 50)
     val MILITIA_COST: Map<ResourceType, Int> = mapOf(ResourceType.FOOD to 60, ResourceType.GOLD to 20)
+    val ARCHER_COST: Map<ResourceType, Int> = mapOf(ResourceType.FOOD to 40, ResourceType.WOOD to 30)
+    val CAVALIER_COST: Map<ResourceType, Int> = mapOf(ResourceType.FOOD to 80, ResourceType.GOLD to 70)
+
+    // Edades
+    val AGE2_COST: Map<ResourceType, Int> = mapOf(ResourceType.FOOD to 200, ResourceType.GOLD to 100)
+    val AGE3_COST: Map<ResourceType, Int> = mapOf(ResourceType.FOOD to 400, ResourceType.GOLD to 200)
+    const val AGE_ATTACK_BONUS = 0.1f   // +10% daño por edad
+
+    // Unidades militares
+    const val ARCHER_RANGE = 150f
 
     // Tiempos (segundos)
     const val VILLAGER_TRAIN_TIME = 8f
     const val MILITIA_TRAIN_TIME = 7f
+    const val ARCHER_TRAIN_TIME = 8f
+    const val CAVALIER_TRAIN_TIME = 12f
     const val HOUSE_BUILD_TIME = 8f
     const val BARRACKS_BUILD_TIME = 15f
     const val TOWER_BUILD_TIME = 12f
@@ -53,12 +65,16 @@ object GameDef {
         Kind.WALL -> WALL_COST
         Kind.VILLAGER -> VILLAGER_COST
         Kind.MILITIA -> MILITIA_COST
+        Kind.ARCHER -> ARCHER_COST
+        Kind.CAVALIER -> CAVALIER_COST
         else -> emptyMap()
     }
 
     fun trainTime(kind: Kind): Float = when (kind) {
         Kind.VILLAGER -> VILLAGER_TRAIN_TIME
         Kind.MILITIA -> MILITIA_TRAIN_TIME
+        Kind.ARCHER -> ARCHER_TRAIN_TIME
+        Kind.CAVALIER -> CAVALIER_TRAIN_TIME
         else -> 10f
     }
 

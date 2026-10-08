@@ -2,7 +2,7 @@ package com.d4r005.ageofempire
 
 import java.util.concurrent.atomic.AtomicLong
 
-enum class Kind { VILLAGER, MILITIA, TOWN_CENTER, HOUSE, BARRACKS, TOWER, WALL, TREE, GOLD_MINE, STONE_MINE, BERRY_BUSH }
+enum class Kind { VILLAGER, MILITIA, ARCHER, CAVALIER, TOWN_CENTER, HOUSE, BARRACKS, TOWER, WALL, TREE, GOLD_MINE, STONE_MINE, BERRY_BUSH }
 
 enum class Team { PLAYER, ENEMY, NEUTRAL }
 
@@ -61,7 +61,7 @@ class Entity(
     var trainTimer = 0f
 
     val isUnit: Boolean
-        get() = kind == Kind.VILLAGER || kind == Kind.MILITIA
+        get() = kind == Kind.VILLAGER || kind == Kind.MILITIA || kind == Kind.ARCHER || kind == Kind.CAVALIER
 
     val isBuilding: Boolean
         get() = kind == Kind.TOWN_CENTER || kind == Kind.HOUSE || kind == Kind.BARRACKS ||

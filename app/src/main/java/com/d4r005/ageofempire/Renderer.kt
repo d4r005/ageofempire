@@ -246,9 +246,16 @@ class Renderer(private val context: Context, private val state: GameState) {
         else -> bmpHouse
     }
 
+    private val bmpArcherBlue by lazy { loadBitmap("sprite_archer_blue") }
+    private val bmpArcherRed by lazy { loadBitmap("sprite_archer_red") }
+    private val bmpCavalierBlue by lazy { loadBitmap("sprite_cavalier_blue") }
+    private val bmpCavalierRed by lazy { loadBitmap("sprite_cavalier_red") }
+
     private fun unitBitmap(kind: Kind, team: Team): Bitmap = when (kind) {
         Kind.VILLAGER -> if (team == Team.PLAYER) bmpVillagerBlue else bmpVillagerRed
         Kind.MILITIA -> if (team == Team.PLAYER) bmpMilitiaBlue else bmpMilitiaRed
+        Kind.ARCHER -> if (team == Team.PLAYER) bmpArcherBlue else bmpArcherRed
+        Kind.CAVALIER -> if (team == Team.PLAYER) bmpCavalierBlue else bmpCavalierRed
         else -> bmpVillagerBlue
     }
 
@@ -315,7 +322,7 @@ class Renderer(private val context: Context, private val state: GameState) {
         val sx = cam.worldToScreenX(e.x)
         val sy = cam.worldToScreenY(e.y)
         val r = e.radius * cam.zoom
-        val span = r * 3.6f
+        val span = r * (if (e.kind == Kind.CAVALIER) 4.6f else 3.6f)
         if (sx + span < 0f || sy + span < 0f || sx - span > canvas.width || sy - span > canvas.height) return
 
         // Sombra de contacto

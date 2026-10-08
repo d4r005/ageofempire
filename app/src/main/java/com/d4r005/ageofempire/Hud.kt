@@ -20,6 +20,9 @@ class Hud(private val state: GameState) {
         const val A_NEW_GAME = 7
         const val A_TOWER = 8
         const val A_WALL = 9
+        const val A_ARCHER = 10
+        const val A_CAVALIER = 11
+        const val A_AGE = 12
 
         const val TOP_BAR_H = 64f
         const val BTN_W = 150f
@@ -106,9 +109,10 @@ class Hud(private val state: GameState) {
         }
         // Población
         val pop = "${state.popCount(Team.PLAYER)}/${state.popCap(Team.PLAYER)}"
+        val ageName = when (state.age) { 2 -> " · Feudal"; 3 -> " · Castillos"; else -> "" }
         textPaint.textAlign = Paint.Align.LEFT
         paint.color = Color.WHITE
-        canvas.drawText("pob $pop", x + 20f, cy + 10f, textPaint)
+        canvas.drawText("pob $pop$ageName", x + 20f, cy + 10f, textPaint)
 
         // Botón "Nuevo" (esquina superior derecha, bajo la barra no: dentro)
         newGameRect.set(canvas.width - 150f, cy - 26f, canvas.width - 16f, cy + 26f)
@@ -230,6 +234,8 @@ class Hud(private val state: GameState) {
             val name = when (sel.kind) {
                 Kind.VILLAGER -> "Aldeano"
                 Kind.MILITIA -> "Milicia"
+                Kind.ARCHER -> "Arquero"
+                Kind.CAVALIER -> "Caballería"
                 Kind.TOWN_CENTER -> "Centro urbano"
                 Kind.HOUSE -> "Casa"
                 Kind.BARRACKS -> "Cuartel"
@@ -328,8 +334,18 @@ class Hud(private val state: GameState) {
                 add(A_STOP, "Alto")
             }
             sel.kind == Kind.MILITIA -> add(A_STOP, "Alto")
-            sel.kind == Kind.TOWN_CENTER && sel.team == Team.PLAYER -> add(A_VILLAGER, "Aldeano 50c")
-            sel.kind == Kind.BARRACKS && sel.team == Team.PLAYER -> add(A_MILITIA, "Milicia 60c 20o")
+            sel.kind == Kind.TOWN_CENTER && sel.team == Team.PLAYER -> {
+                add(A_VILLAGER, "Aldeano 50c")
+                when (state.age) {
+                    1 -> add(A_AGE, "Edad Feudal")
+                    2 -> add(A_AGE, "Edad Castillos")
+                }
+            }
+            sel.kind == Kind.BARRACKS && sel.team == Team.PLAYER -> {
+                add(A_MILITIA, "Milicia 60c")
+                if (state.age >= 2) add(A_ARCHER, "Arquero 40c")
+                if (state.age >= 3) add(A_CAVALIER, "Caballería 80c")
+            }
             else -> { }
         }
     }
@@ -351,6 +367,9 @@ class Hud(private val state: GameState) {
             A_CANCEL -> state.buildMode = null
             A_TOWER -> state.startBuildMode(Kind.TOWER)
             A_WALL -> state.startBuildMode(Kind.WALL)
+            A_ARCHER -> if (sel != null) state.tryQueueUnit(sel, Kind.ARCHER)
+            A_CAVALIER -> if (sel != null) state.tryQueueUnit(sel, Kind.CAVALIER)
+            A_AGE -> state.tryAdvanceAge()
             A_NEW_GAME -> onNewGame?.invoke()
         }
     }

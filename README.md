@@ -2,11 +2,13 @@
 
 Un juego de estrategia en tiempo real (RTS) para Android inspirado en Age of Empires, escrito 100% en Kotlin nativo, sin dependencias externas.
 
-## Estado: v0.5.0 — torres y murallas + sonido y música
+## Estado: v0.6.0 — arqueros, caballería y sistema de edades
 
 - **v0.3.0**: pasto con 3 variantes y relieve, agua animada, costas con borde mojado y espuma, árboles más grandes con 3 variantes, edificios isométricos y unidades con volumen, orden de dibujo por profundidad y viñeteado
 - Mapa de tiles generado aleatoriamente (pasto, agua, arena) de 64×48, ahora con **texturas reales** en lugar de colores planos
-- **Torres de vigilancia** que disparan flechas a enemigos en rango y **murallas** de piedra (defensa pasiva)
+- **Arqueros** (a distancia, Edad Feudal) y **caballería** (rápidos y fuertes, Edad de los Castillos)
+**Tres edades**: Oscura → Feudal → Castillos, investigadas en el centro urbano; cada edad da +10% de daño
+**Torres de vigilancia** que disparan flechas a enemigos en rango y **murallas** de piedra (defensa pasiva)
 - **Efectos de sonido y música**: hachazos, espadas, flechas, cuernos de incursión, fanfarrias
 - Edificios, unidades y recursos con **sprites ilustrados** estilo Age of Empires 2 (centro urbano, casa, cuartel, aldeano, milicia, árbol, mina de oro, mina de piedra, arbusto de bayas)
 - Estandarte de color por equipo sobre los edificios y sombra de contacto bajo las unidades
@@ -41,7 +43,7 @@ Instala la APK en tu teléfono o usa un emulador.
 | Arrastrar con un dedo | Mover cámara |
 | Pellizco con dos dedos | Zoom |
 | Tap o arrastre en el minimapa (arriba a la derecha) | Mover la cámara |
-| Botones inferiores | Construir, entrenar, detener |
+| Botones inferiores | Construir, entrenar, investigar, detener |
 
 **Guardado automático**: la partida se guarda al cerrar la app y se recupera al abrirla. El botón «Nuevo» en la barra superior empieza una partida fresca.
 
@@ -66,8 +68,8 @@ Instala la APK en tu teléfono o usa un emulador.
 - [ ] Animaciones completas de sprite sheet
 - [x] Sonido y música
 - [x] Más edificios (murallas y torres)
-- [ ] Más unidades (arqueros, caballería)
-- [ ] Edades / tecnologías
+- [x] Más unidades (arqueros y caballería)
+- [x] Edades / tecnologías (Oscura → Feudal → Castillos, +10% daño por edad)
 
 ## Estructura del código
 

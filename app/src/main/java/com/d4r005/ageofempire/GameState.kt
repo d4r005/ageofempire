@@ -22,6 +22,8 @@ class GameState {
     var message = ""
     var messageTimer = 0f
     var result = 0          // 0 jugando, 1 victoria, 2 derrota
+    var age = 1             // edad del jugador: 1 oscura, 2 feudal, 3 castillos
+    private var enemyAge = 1
     var time = 0f
 
     val projectiles = ArrayList<Projectile>()
@@ -60,6 +62,8 @@ class GameState {
         selectedIds.clear()
         buildMode = null
         result = 0
+        age = 1
+        enemyAge = 1
         worldVersion++
         time = 0f
         aiTimer = 25f
@@ -311,6 +315,8 @@ class GameState {
         when (kind) {
             Kind.VILLAGER -> { u.maxHp = 25; u.speed = 65f; u.radius = 9f; u.damage = 3 }
             Kind.MILITIA -> { u.maxHp = 40; u.speed = 75f; u.radius = 10f; u.damage = 8 }
+            Kind.ARCHER -> { u.maxHp = 30; u.speed = 70f; u.radius = 10f; u.damage = 7 }
+            Kind.CAVALIER -> { u.maxHp = 110; u.speed = 110f; u.radius = 12f; u.damage = 14 }
             else -> {}
         }
         u.hp = u.maxHp
@@ -604,10 +610,34 @@ class GameState {
             showMessage("Población al máxima: construye casas")
             return
         }
+        val reqAge = when (kind) {
+            Kind.ARCHER -> 2
+            Kind.CAVALIER -> 3
+            else -> 1
+        }
+        if (age < reqAge) {
+            showMessage(if (reqAge == 2) "Requiere la Edad Feudal" else "Requiere la Edad de los Castillos")
+            return
+        }
         val cost = GameDef.costOf(kind)
         if (!canAfford(cost)) { showMessage("Recursos insuficientes"); return }
         pay(cost)
         building.trainQueue.add(kind)
+    }
+
+    /** Avanza la edad del jugador (investigación en el centro urbano). */
+    fun tryAdvanceAge() {
+        if (result != 0) return
+        if (age >= 3) return
+        val cost = if (age == 1) GameDef.AGE2_COST else GameDef.AGE3_COST
+        if (!canAfford(cost)) { showMessage("Recursos insuficientes"); return }
+        pay(cost)
+        age++
+        sfx("build_done")
+        when (age) {
+            2 -> showMessage("¡Edad Feudal! Arqueros disponibles, +10% daño")
+            else -> showMessage("¡Edad de los Castillos! Caballería disponible, +20% daño")
+        }
     }
 
     fun stopSelected() {
@@ -781,21 +811,29 @@ class GameState {
             }
             return
         }
-        val range = u.radius + (if (t.isBuilding) t.halfSize else t.radius) + 12f
+        val isArcher = u.kind == Kind.ARCHER
+        val range = if (isArcher) GameDef.ARCHER_RANGE
+            else u.radius + (if (t.isBuilding) t.halfSize else t.radius) + 12f
         val d = sqrt((t.x - u.x) * (t.x - u.x) + (t.y - u.y) * (t.y - u.y))
         if (d > range) {
             moveTo(u, t.x, t.y, dt, range)
         } else {
             u.attackCd -= dt
             if (u.attackCd <= 0f) {
-                u.attackCd = 1f
-                t.hp -= u.damage
-                if (u.team == Team.PLAYER) sfx("hit")
-                if (t.hp <= 0) {
-                    t.hp = 0
-                    t.dead = true
-                    if (t.isBuilding && t.kind == Kind.TOWN_CENTER && t.team == Team.PLAYER) {
-                        showMessage("¡Tu centro urbano ha caído!")
+                u.attackCd = if (isArcher) 1.4f else 1f
+                val dmg = (u.damage * attackBoost(u.team)).toInt()
+                if (isArcher) {
+                    projectiles.add(Projectile(u.x, u.y - 12f, t.id, t.x, t.y, dmg))
+                    if (u.team == Team.PLAYER) sfx("arrow")
+                } else {
+                    t.hp -= dmg
+                    if (u.team == Team.PLAYER) sfx("hit")
+                    if (t.hp <= 0) {
+                        t.hp = 0
+                        t.dead = true
+                        if (t.isBuilding && t.kind == Kind.TOWN_CENTER && t.team == Team.PLAYER) {
+                            showMessage("¡Tu centro urbano ha caído!")
+                        }
                     }
                 }
             }
@@ -826,7 +864,8 @@ class GameState {
         val target = nearestEnemy(b, GameDef.TOWER_RANGE)
         if (target == null) { b.attackCd = 0.15f; return }
         b.attackCd = GameDef.TOWER_COOLDOWN
-        projectiles.add(Projectile(b.x, b.y - b.halfSize * 1.2f, target.id, target.x, target.y, GameDef.TOWER_DAMAGE))
+        val dmg = (GameDef.TOWER_DAMAGE * attackBoost(b.team)).toInt()
+        projectiles.add(Projectile(b.x, b.y - b.halfSize * 1.2f, target.id, target.x, target.y, dmg))
         if (b.team == Team.PLAYER) sfx("arrow")
     }
 
@@ -857,11 +896,20 @@ class GameState {
 
     // ------------------------------------------------------------ IA enemiga
 
+    fun ageOf(team: Team): Int = when (team) {
+        Team.PLAYER -> age
+        Team.ENEMY -> enemyAge
+        else -> 1
+    }
+
+    fun attackBoost(team: Team): Float = 1f + GameDef.AGE_ATTACK_BONUS * (ageOf(team) - 1)
+
     private fun updateEnemyAi(dt: Float) {
         aiTimer -= dt
         if (aiTimer > 0f) return
         raids++
         aiTimer = (45f - raids * 2f).coerceIn(20f, 45f)
+        if (raids % 3 == 0 && enemyAge < 3) enemyAge++
 
         val eTc = entities.firstOrNull {
             !it.dead && it.team == Team.ENEMY && it.kind == Kind.TOWN_CENTER
@@ -869,8 +917,14 @@ class GameState {
 
         val count = min(1 + raids, 6)
         for (i in 0 until count) {
+            // composición según la edad enemiga: milicia, luego arqueros, luego caballería
+            val kind = when {
+                i >= count - 1 && raids >= 6 && enemyAge >= 3 -> Kind.CAVALIER
+                i >= count - 2 && raids >= 3 && enemyAge >= 2 -> Kind.ARCHER
+                else -> Kind.MILITIA
+            }
             val m = spawnUnit(
-                Kind.MILITIA, Team.ENEMY,
+                kind, Team.ENEMY,
                 eTc.x - 80f - i * 30f, eTc.y - 60f + i * 20f
             )
             val target = nearestEnemy(m, 100000f)
@@ -900,6 +954,8 @@ class GameState {
         root.put("raids", raids)
         root.put("aiTimer", aiTimer.toDouble())
         root.put("sel", selectedId)
+        root.put("age", age)
+        root.put("eage", enemyAge)
         root.put("camX", camera.x.toDouble())
         root.put("camY", camera.y.toDouble())
         root.put("zoom", camera.zoom.toDouble())
@@ -986,6 +1042,8 @@ class GameState {
                 entities.add(e)
             }
             Entity.syncNextId(maxId)
+            age = root.optInt("age", 1)
+            enemyAge = root.optInt("eage", 1)
             selectedId = root.getLong("sel")
             selectedIds.clear()
             if (selectedId != -1L) selectedIds.add(selectedId)
