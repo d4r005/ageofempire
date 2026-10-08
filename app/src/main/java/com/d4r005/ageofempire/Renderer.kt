@@ -6,6 +6,10 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.LinearGradient
+import android.graphics.RadialGradient
+import android.graphics.Shader
 import android.graphics.Rect
 import android.graphics.RectF
 import kotlin.math.ceil
@@ -37,6 +41,11 @@ class Renderer(private val context: Context, private val state: GameState) {
     }
 
     private val tileGrass by lazy { loadBitmap("tile_grass") }
+    private val tileGrassB by lazy { loadBitmap("tile_grass_b") }
+    private val tileGrassC by lazy { loadBitmap("tile_grass_c") }
+    private val tileWaterB by lazy { loadBitmap("tile_water_b") }
+    private val bmpTreeB by lazy { loadBitmap("sprite_tree_b") }
+    private val bmpTreeC by lazy { loadBitmap("sprite_tree_c") }
     private val tileSand by lazy { loadBitmap("tile_sand") }
     private val tileWater by lazy { loadBitmap("tile_water") }
 
@@ -67,30 +76,146 @@ class Renderer(private val context: Context, private val state: GameState) {
         val tx1 = ceil((cam.x + cam.viewW / cam.zoom) / ts).toInt().coerceIn(0, GameDef.MAP_W - 1)
         val ty1 = ceil((cam.y + cam.viewH / cam.zoom) / ts).toInt().coerceIn(0, GameDef.MAP_H - 1)
 
-        srcRectCache.set(0, 0, tileGrass.width, tileGrass.height)
+        val size = ts * cam.zoom
+        val time = (System.currentTimeMillis() % 100000L) / 1000f
+
+        // 1) Base: pasto con variantes, arena y agua animada
         for (ty in ty0..ty1) {
             for (tx in tx0..tx1) {
-                val bmp = when (state.tileAt(tx, ty)) {
-                    GameDef.WATER -> tileWater
+                val t = state.tileAt(tx, ty)
+                val h = tileHash(tx, ty)
+                val bmp = when (t) {
+                    GameDef.WATER -> if (((time * 0.6f).toInt() + h) % 2 == 0) tileWater else tileWaterB
                     GameDef.SAND -> tileSand
-                    else -> tileGrass
+                    else -> when (h % 3) { 0 -> tileGrass; 1 -> tileGrassB; else -> tileGrassC }
                 }
                 val left = cam.worldToScreenX(tx * ts)
                 val top = cam.worldToScreenY(ty * ts)
-                val size = ts * cam.zoom
                 srcRectCache.set(0, 0, bmp.width, bmp.height)
-                dstRectF.set(left, top, left + size + 0.5f, top + size + 0.5f)
+                dstRectF.set(left, top, left + size + 1f, top + size + 1f)
                 canvas.drawBitmap(bmp, srcRectCache, dstRectF, bitmapPaint)
             }
         }
 
-        for (e in state.entities) if (e.isResource) drawResource(e, canvas, cam)
-        for (e in state.entities) if (e.isBuilding) drawBuilding(e, canvas, cam)
-        for (e in state.entities) if (e.isUnit) drawUnit(e, canvas, cam)
+        // 2) Costas suaves: esquinas redondeadas, borde húmedo y espuma
+        for (ty in ty0..ty1) {
+            for (tx in tx0..tx1) {
+                val t = state.tileAt(tx, ty)
+                if (t == GameDef.WATER) continue
+                val left = cam.worldToScreenX(tx * ts)
+                val top = cam.worldToScreenY(ty * ts)
+                drawShore(canvas, tx, ty, left, top, size, time)
+            }
+        }
+
+        // 3) Viñeteado de luz suave para dar profundidad
+        drawVignette(canvas)
+
+        // Orden por profundidad (Y) para que lo cercano tape lo lejano
+        drawList.clear()
+        for (e in state.entities) drawList.add(e)
+        drawList.sortBy { it.y }
+        for (e in drawList) {
+            when {
+                e.isResource -> drawResource(e, canvas, cam)
+                e.isBuilding -> drawBuilding(e, canvas, cam)
+                e.isUnit -> drawUnit(e, canvas, cam)
+            }
+        }
     }
 
-    private fun resourceBitmap(kind: Kind): Bitmap = when (kind) {
-        Kind.TREE -> bmpTree
+    private val drawList = ArrayList<Entity>()
+    private val path = Path()
+    private var vignette: android.graphics.Paint? = null
+
+    private fun tileHash(x: Int, y: Int): Int {
+        var h = x * 73856093 xor y * 19349663
+        h = h xor (h ushr 13)
+        return h and 0x7fffffff
+    }
+
+    private fun isWater(x: Int, y: Int) = state.tileAt(x, y) == GameDef.WATER
+
+    /** Dibuja el borde de agua sobre un tile de tierra, redondeando las esquinas. */
+    private fun drawShore(canvas: Canvas, tx: Int, ty: Int, left: Float, top: Float, size: Float, time: Float) {
+        val n = isWater(tx, ty - 1); val s = isWater(tx, ty + 1)
+        val w = isWater(tx - 1, ty); val e = isWater(tx + 1, ty)
+        val nw = isWater(tx - 1, ty - 1); val ne = isWater(tx + 1, ty - 1)
+        val sw = isWater(tx - 1, ty + 1); val se = isWater(tx + 1, ty + 1)
+        if (!(n || s || w || e || nw || ne || sw || se)) return
+
+        val r = size * 0.5f          // radio de las esquinas redondeadas
+        val bw = size * 0.16f        // ancho del borde mojado
+        val foam = 0.5f + 0.5f * kotlin.math.sin(time * 2f + tx * 0.7f + ty * 0.9f)
+
+        // Agua que "muerde" la esquina de la tierra (esquinas convexas de la costa)
+        paint.style = Paint.Style.FILL
+        paint.color = 0xFF2A7AAE.toInt()
+        if (n && w) cornerBite(canvas, left, top, r, 0)
+        if (n && e) cornerBite(canvas, left + size, top, r, 1)
+        if (s && w) cornerBite(canvas, left, top + size, r, 2)
+        if (s && e) cornerBite(canvas, left + size, top + size, r, 3)
+
+        // Borde mojado (arena oscura) y espuma en los lados con agua
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb(120, 120, 98, 60)
+        if (n) canvas.drawRect(left, top, left + size, top + bw, paint)
+        if (s) canvas.drawRect(left, top + size - bw, left + size, top + size, paint)
+        if (w) canvas.drawRect(left, top, left + bw, top + size, paint)
+        if (e) canvas.drawRect(left + size - bw, top, left + size, top + size, paint)
+
+        paint.color = Color.argb((90 + 90 * foam).toInt(), 255, 255, 255)
+        val fw = size * 0.05f
+        if (n) canvas.drawRect(left, top, left + size, top + fw, paint)
+        if (s) canvas.drawRect(left, top + size - fw, left + size, top + size, paint)
+        if (w) canvas.drawRect(left, top, left + fw, top + size, paint)
+        if (e) canvas.drawRect(left + size - fw, top, left + size, top + size, paint)
+
+        // Esquinas cóncavas (solo diagonal con agua): pequeño charco redondeado
+        paint.color = 0xFF2A7AAE.toInt()
+        val q = size * 0.28f
+        if (nw && !n && !w) canvas.drawArc(left - q, top - q, left + q, top + q, 0f, 90f, true, paint)
+        if (ne && !n && !e) canvas.drawArc(left + size - q, top - q, left + size + q, top + q, 90f, 90f, true, paint)
+        if (sw && !s && !w) canvas.drawArc(left - q, top + size - q, left + q, top + size + q, 270f, 90f, true, paint)
+        if (se && !s && !e) canvas.drawArc(left + size - q, top + size - q, left + size + q, top + size + q, 180f, 90f, true, paint)
+    }
+
+    private val biteRect = RectF()
+
+    /**
+     * Esquina convexa de costa: el agua ocupa el cuadrante del tile y se recorta
+     * con un arco, dejando la tierra con la esquina redondeada.
+     * (cx, cy) es la esquina del tile que toca el agua; corner: 0=NO 1=NE 2=SO 3=SE.
+     */
+    private fun cornerBite(canvas: Canvas, cx: Float, cy: Float, r: Float, corner: Int) {
+        val dx = if (corner == 0 || corner == 2) 1f else -1f   // hacia dentro del tile
+        val dy = if (corner == 0 || corner == 1) 1f else -1f
+        // Centro del arco: desplazado r hacia el interior del tile
+        val ax = cx + dx * r
+        val ay = cy + dy * r
+        biteRect.set(ax - r, ay - r, ax + r, ay + r)
+        val startAngle = when (corner) { 0 -> 180f; 1 -> 270f; 2 -> 90f; else -> 0f }
+        path.reset()
+        path.moveTo(cx, cy)
+        path.lineTo(ax + (if (dx > 0) -r else r), ay)          // borde vertical hasta el arco
+        path.arcTo(biteRect, startAngle + (if (corner == 0 || corner == 3) 0f else 0f), 90f)
+        path.close()
+        canvas.drawPath(path, paint)
+    }
+
+    private fun drawVignette(canvas: Canvas) {
+        val w = canvas.width.toFloat(); val h = canvas.height.toFloat()
+        val p = vignette ?: Paint().also { vignette = it }
+        p.shader = RadialGradient(
+            w / 2f, h / 2f, kotlin.math.max(w, h) * 0.75f,
+            intArrayOf(Color.TRANSPARENT, Color.TRANSPARENT, Color.argb(70, 0, 20, 0)),
+            floatArrayOf(0f, 0.65f, 1f), Shader.TileMode.CLAMP
+        )
+        canvas.drawRect(0f, 0f, w, h, p)
+    }
+
+    private fun resourceBitmap(kind: Kind, id: Int = 0): Bitmap = when (kind) {
+        Kind.TREE -> when (kotlin.math.abs(id) % 3) { 0 -> bmpTree; 1 -> bmpTreeB; else -> bmpTreeC }
         Kind.GOLD_MINE -> bmpGold
         Kind.STONE_MINE -> bmpStone
         Kind.BERRY_BUSH -> bmpBerry
@@ -129,9 +254,12 @@ class Renderer(private val context: Context, private val state: GameState) {
     private fun drawResource(e: Entity, canvas: Canvas, cam: Camera) {
         val sx = cam.worldToScreenX(e.x)
         val sy = cam.worldToScreenY(e.y)
-        val span = e.radius * 2.3f * cam.zoom
+        val big = if (e.kind == Kind.TREE) 4.2f else 3.0f
+        val span = e.radius * big * cam.zoom
         if (sx < -span || sy < -span || sx > canvas.width + span || sy > canvas.height + span) return
-        drawBitmapCentered(resourceBitmap(e.kind), canvas, sx, sy, span / 2f, span / 2f)
+        // El sprite se ancla por la base: el tronco queda en el punto del recurso
+        val lift = if (e.kind == Kind.TREE) span * 0.34f else span * 0.12f
+        drawBitmapCentered(resourceBitmap(e.kind, e.id.hashCode()), canvas, sx, sy - lift, span / 2f, span / 2f)
     }
 
     private fun drawBuilding(e: Entity, canvas: Canvas, cam: Camera) {

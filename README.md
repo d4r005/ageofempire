@@ -2,8 +2,9 @@
 
 Un juego de estrategia en tiempo real (RTS) para Android inspirado en Age of Empires, escrito 100% en Kotlin nativo, sin dependencias externas.
 
-## Estado: v0.2.0 — arte real + orientación vertical
+## Estado: v0.3.0 — gráficos mejorados (estilo AoE2)
 
+- **v0.3.0**: pasto con 3 variantes y relieve, agua animada, costas con borde mojado y espuma, árboles más grandes con 3 variantes, edificios isométricos y unidades con volumen, orden de dibujo por profundidad y viñeteado
 - Mapa de tiles generado aleatoriamente (pasto, agua, arena) de 64×48, ahora con **texturas reales** en lugar de colores planos
 - Edificios, unidades y recursos con **sprites ilustrados** estilo Age of Empires 2 (centro urbano, casa, cuartel, aldeano, milicia, árbol, mina de oro, mina de piedra, arbusto de bayas)
 - Estandarte de color por equipo sobre los edificios y sombra de contacto bajo las unidades
