@@ -57,6 +57,8 @@ class Renderer(private val context: Context, private val state: GameState) {
     private val bmpTownCenter by lazy { loadBitmap("sprite_town_center") }
     private val bmpHouse by lazy { loadBitmap("sprite_house") }
     private val bmpBarracks by lazy { loadBitmap("sprite_barracks") }
+    private val bmpTower by lazy { loadBitmap("sprite_tower") }
+    private val bmpWall by lazy { loadBitmap("sprite_wall") }
 
     private val bmpVillagerBlue by lazy { loadBitmap("sprite_villager_blue") }
     private val bmpVillagerRed by lazy { loadBitmap("sprite_villager_red") }
@@ -121,6 +123,19 @@ class Renderer(private val context: Context, private val state: GameState) {
                 e.isBuilding -> drawBuilding(e, canvas, cam)
                 e.isUnit -> drawUnit(e, canvas, cam)
             }
+        }
+
+        // Flechas de las torres
+        paint.style = Paint.Style.FILL
+        paint.color = 0xFF4A3A26.toInt()
+        for (p in state.projectiles) {
+            val px = cam.worldToScreenX(p.x)
+            val py = cam.worldToScreenY(p.y)
+            if (px < -20f || py < -20f || px > canvas.width + 20f || py > canvas.height + 20f) continue
+            canvas.drawOval(
+                px - 5f * cam.zoom, py - 2.5f * cam.zoom,
+                px + 5f * cam.zoom, py + 2.5f * cam.zoom, paint
+            )
         }
     }
 
@@ -226,6 +241,8 @@ class Renderer(private val context: Context, private val state: GameState) {
         Kind.TOWN_CENTER -> bmpTownCenter
         Kind.HOUSE -> bmpHouse
         Kind.BARRACKS -> bmpBarracks
+        Kind.TOWER -> bmpTower
+        Kind.WALL -> bmpWall
         else -> bmpHouse
     }
 
@@ -271,7 +288,10 @@ class Renderer(private val context: Context, private val state: GameState) {
 
         val constructing = e.construction < 1f
         val alpha = if (constructing) (90 + 165 * e.construction).toInt().coerceIn(0, 255) else 255
-        drawBitmapCentered(buildingBitmap(e.kind), canvas, sx, sy - hs * 0.15f, span / 2f, span / 2f, alpha)
+        val bmp = buildingBitmap(e.kind)
+        val bh = span * bmp.height / bmp.width
+        val lift = if (e.kind == Kind.TOWER) bh * 0.30f else hs * 0.15f
+        drawBitmapCentered(bmp, canvas, sx, sy - lift, span / 2f, bh / 2f, alpha)
 
         // Estandarte de equipo
         paint.style = Paint.Style.FILL

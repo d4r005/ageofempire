@@ -18,9 +18,11 @@ class Hud(private val state: GameState) {
         const val A_STOP = 5
         const val A_CANCEL = 6
         const val A_NEW_GAME = 7
+        const val A_TOWER = 8
+        const val A_WALL = 9
 
         const val TOP_BAR_H = 64f
-        const val BTN_W = 196f
+        const val BTN_W = 150f
         const val BTN_H = 72f
         const val BTN_GAP = 14f
         const val BTN_BOTTOM = 24f
@@ -33,6 +35,7 @@ class Hud(private val state: GameState) {
     private val buttons = ArrayList<ButtonDef>()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 28f }
+    private val btnTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 22f; textAlign = Paint.Align.CENTER }
     private val smallTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 22f }
     private val titleTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 72f; textAlign = Paint.Align.CENTER }
     private val msgTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 34f; textAlign = Paint.Align.CENTER }
@@ -230,6 +233,8 @@ class Hud(private val state: GameState) {
                 Kind.TOWN_CENTER -> "Centro urbano"
                 Kind.HOUSE -> "Casa"
                 Kind.BARRACKS -> "Cuartel"
+                Kind.TOWER -> "Torre"
+                Kind.WALL -> "Muralla"
                 Kind.TREE -> "Árbol"
                 Kind.GOLD_MINE -> "Mina de oro"
                 Kind.STONE_MINE -> "Mina de piedra"
@@ -241,7 +246,13 @@ class Hud(private val state: GameState) {
         }
         if (mode != null) {
             smallTextPaint.textAlign = Paint.Align.LEFT
-            val label = if (mode == Kind.HOUSE) "Toca el mapa para colocar una Casa (30 madera)" else "Toca el mapa para colocar un Cuartel (100 madera)"
+            val label = when (mode) {
+                Kind.HOUSE -> "Toca el mapa para colocar una Casa (30 madera)"
+                Kind.BARRACKS -> "Toca el mapa para colocar un Cuartel (100 madera)"
+                Kind.TOWER -> "Toca el mapa para colocar una Torre (30 madera, 80 piedra)"
+                Kind.WALL -> "Toca el mapa para colocar un Muro (10 piedra)"
+                else -> ""
+            }
             canvas.drawText(label, 24f, top + 32f, smallTextPaint)
         }
 
@@ -260,7 +271,7 @@ class Hud(private val state: GameState) {
             if (b.action == A_CANCEL) paint.color = 0xFFD03A3A.toInt()
             canvas.drawRoundRect(b.rect, 12f, 12f, paint)
             textPaint.textAlign = Paint.Align.CENTER
-            canvas.drawText(b.label, b.rect.centerX(), b.rect.centerY() + 10f, textPaint)
+            canvas.drawText(b.label, b.rect.centerX(), b.rect.centerY() + 9f, btnTextPaint)
             bx += BTN_W + BTN_GAP
         }
     }
@@ -312,6 +323,8 @@ class Hud(private val state: GameState) {
             sel.kind == Kind.VILLAGER && sel.team == Team.PLAYER -> {
                 add(A_HOUSE, "Casa 30m")
                 add(A_BARRACKS, "Cuartel 100m")
+                add(A_TOWER, "Torre 30+80p")
+                add(A_WALL, "Muro 10p")
                 add(A_STOP, "Alto")
             }
             sel.kind == Kind.MILITIA -> add(A_STOP, "Alto")
@@ -336,6 +349,8 @@ class Hud(private val state: GameState) {
             A_MILITIA -> if (sel != null) state.tryQueueUnit(sel, Kind.MILITIA)
             A_STOP -> state.stopSelected()
             A_CANCEL -> state.buildMode = null
+            A_TOWER -> state.startBuildMode(Kind.TOWER)
+            A_WALL -> state.startBuildMode(Kind.WALL)
             A_NEW_GAME -> onNewGame?.invoke()
         }
     }

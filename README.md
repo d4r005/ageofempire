@@ -2,10 +2,12 @@
 
 Un juego de estrategia en tiempo real (RTS) para Android inspirado en Age of Empires, escrito 100% en Kotlin nativo, sin dependencias externas.
 
-## Estado: v0.4.0 — jugabilidad móvil: multiselección, minimapa, A* y guardado
+## Estado: v0.5.0 — torres y murallas + sonido y música
 
 - **v0.3.0**: pasto con 3 variantes y relieve, agua animada, costas con borde mojado y espuma, árboles más grandes con 3 variantes, edificios isométricos y unidades con volumen, orden de dibujo por profundidad y viñeteado
 - Mapa de tiles generado aleatoriamente (pasto, agua, arena) de 64×48, ahora con **texturas reales** en lugar de colores planos
+- **Torres de vigilancia** que disparan flechas a enemigos en rango y **murallas** de piedra (defensa pasiva)
+- **Efectos de sonido y música**: hachazos, espadas, flechas, cuernos de incursión, fanfarrias
 - Edificios, unidades y recursos con **sprites ilustrados** estilo Age of Empires 2 (centro urbano, casa, cuartel, aldeano, milicia, árbol, mina de oro, mina de piedra, arbusto de bayas)
 - Estandarte de color por equipo sobre los edificios y sombra de contacto bajo las unidades
 - **Orientación vertical (portrait)** — pensado para jugar con una mano
@@ -49,6 +51,7 @@ Instala la APK en tu teléfono o usa un emulador.
 2. Acumula madera y comida; entrena más aldeanos desde el centro urbano.
 3. Construye casas para subir el límite de población.
 4. Levanta un cuartel y entrena milicia (necesitas oro: manda aldeanos a las minas).
+5. Con piedra, levanta murallas y torres: las torres disparan solas a los enemigos en rango.
 5. Destruye el centro urbano enemigo antes de que sus incursiones arrasen el tuyo.
 
 ## Hoja de ruta
@@ -61,8 +64,8 @@ Instala la APK en tu teléfono o usa un emulador.
 - [x] Guardado automático de partida
 - [x] Minimapa táctil
 - [ ] Animaciones completas de sprite sheet
-- [ ] Sonido y música
-- [ ] Más edificios (molino, granja, murallas, torres)
+- [x] Sonido y música
+- [x] Más edificios (murallas y torres)
 - [ ] Más unidades (arqueros, caballería)
 - [ ] Edades / tecnologías
 

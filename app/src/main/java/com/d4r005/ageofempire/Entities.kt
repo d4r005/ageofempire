@@ -2,7 +2,7 @@ package com.d4r005.ageofempire
 
 import java.util.concurrent.atomic.AtomicLong
 
-enum class Kind { VILLAGER, MILITIA, TOWN_CENTER, HOUSE, BARRACKS, TREE, GOLD_MINE, STONE_MINE, BERRY_BUSH }
+enum class Kind { VILLAGER, MILITIA, TOWN_CENTER, HOUSE, BARRACKS, TOWER, WALL, TREE, GOLD_MINE, STONE_MINE, BERRY_BUSH }
 
 enum class Team { PLAYER, ENEMY, NEUTRAL }
 
@@ -64,8 +64,22 @@ class Entity(
         get() = kind == Kind.VILLAGER || kind == Kind.MILITIA
 
     val isBuilding: Boolean
-        get() = kind == Kind.TOWN_CENTER || kind == Kind.HOUSE || kind == Kind.BARRACKS
+        get() = kind == Kind.TOWN_CENTER || kind == Kind.HOUSE || kind == Kind.BARRACKS ||
+            kind == Kind.TOWER || kind == Kind.WALL
 
     val isResource: Boolean
         get() = kind == Kind.TREE || kind == Kind.GOLD_MINE || kind == Kind.STONE_MINE || kind == Kind.BERRY_BUSH
+}
+
+/** Proyectil de flecha (torres). */
+class Projectile(
+    var x: Float,
+    var y: Float,
+    val targetId: Long,
+    var tx: Float,
+    var ty: Float,
+    val damage: Int,
+    val speed: Float = 340f
+) {
+    var alive = true
 }

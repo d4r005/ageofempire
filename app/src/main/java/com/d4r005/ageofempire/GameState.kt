@@ -17,12 +17,14 @@ class GameState {
     var selectedId = -1L
     val selectedIds = LinkedHashSet<Long>()
     var worldVersion = 0          // cambia cuando se (re)genera el mundo: el minimapa se refresca
+    var onSound: ((String) -> Unit)? = null   // el GameView lo conecta al SoundManager
     var buildMode: Kind? = null
     var message = ""
     var messageTimer = 0f
     var result = 0          // 0 jugando, 1 victoria, 2 derrota
     var time = 0f
 
+    val projectiles = ArrayList<Projectile>()
     private var aiTimer = 25f
     private var raids = 0
     private val rnd = Random(System.currentTimeMillis())
@@ -40,6 +42,7 @@ class GameState {
             if (e.isUnit) updateUnit(e, dt)
             else if (e.isBuilding) updateBuilding(e, dt)
         }
+        updateProjectiles(dt)
         entities.removeAll { it.dead }
         if (selected() == null) selectedId = -1L
         if (selectedIds.isNotEmpty() && selectedUnits().isEmpty()) selectedIds.clear()
@@ -52,6 +55,7 @@ class GameState {
 
     fun startNewGame() {
         entities = ArrayList()
+        projectiles.clear()
         selectedId = -1L
         selectedIds.clear()
         buildMode = null
@@ -323,6 +327,8 @@ class GameState {
             Kind.TOWN_CENTER -> { b.maxHp = 1000; b.halfSize = 48f }
             Kind.HOUSE -> { b.maxHp = 250; b.halfSize = 26f }
             Kind.BARRACKS -> { b.maxHp = 500; b.halfSize = 34f }
+            Kind.TOWER -> { b.maxHp = 400; b.halfSize = 22f }
+            Kind.WALL -> { b.maxHp = 300; b.halfSize = 28f }
             else -> {}
         }
         b.construction = construction
@@ -429,7 +435,13 @@ class GameState {
     }
 
     fun canPlace(kind: Kind, wx: Float, wy: Float): Boolean {
-        val half = if (kind == Kind.HOUSE) 26f else 34f
+        val half = when (kind) {
+            Kind.HOUSE -> 26f
+            Kind.BARRACKS -> 34f
+            Kind.TOWER -> 22f
+            Kind.WALL -> 28f
+            else -> 26f
+        }
         val d = half * 0.9f
         if (!isWalkable(wx - d, wy - d) || !isWalkable(wx + d, wy - d) ||
             !isWalkable(wx - d, wy + d) || !isWalkable(wx + d, wy + d)) return false
@@ -710,6 +722,7 @@ class GameState {
             t.amount -= take
             u.carryType = t.resourceType
             u.carryAmount += take
+            if (u.team == Team.PLAYER) sfx("chop")
             if (t.amount <= 0) t.dead = true
         }
     }
@@ -747,6 +760,7 @@ class GameState {
             if (t.construction >= 1f) {
                 t.construction = 1f
                 t.hp = t.maxHp
+                if (t.team == Team.PLAYER) sfx("build_done")
                 showMessage("Construcción terminada")
             } else {
                 t.hp = (t.maxHp * t.construction).toInt().coerceAtLeast(1)
@@ -776,6 +790,7 @@ class GameState {
             if (u.attackCd <= 0f) {
                 u.attackCd = 1f
                 t.hp -= u.damage
+                if (u.team == Team.PLAYER) sfx("hit")
                 if (t.hp <= 0) {
                     t.hp = 0
                     t.dead = true
@@ -789,6 +804,7 @@ class GameState {
 
     private fun updateBuilding(b: Entity, dt: Float) {
         if (b.construction < 1f) return
+        if (b.kind == Kind.TOWER) { updateTower(b, dt); return }
         if (b.trainQueue.isEmpty()) return
         b.trainTimer += dt
         val kind = b.trainQueue.first()
@@ -797,10 +813,47 @@ class GameState {
             b.trainQueue.removeAt(0)
             spawnUnit(kind, b.team, b.x + b.halfSize + 24f, b.y + b.halfSize + 10f)
             if (b.team == Team.PLAYER) {
+                sfx("unit_ready")
                 showMessage(if (kind == Kind.VILLAGER) "Aldeano listo" else "Milicia lista")
             }
         }
     }
+
+    /** La torre dispara flechas a enemigos en rango (defensa pasiva). */
+    private fun updateTower(b: Entity, dt: Float) {
+        b.attackCd -= dt
+        if (b.attackCd > 0f) return
+        val target = nearestEnemy(b, GameDef.TOWER_RANGE)
+        if (target == null) { b.attackCd = 0.15f; return }
+        b.attackCd = GameDef.TOWER_COOLDOWN
+        projectiles.add(Projectile(b.x, b.y - b.halfSize * 1.2f, target.id, target.x, target.y, GameDef.TOWER_DAMAGE))
+        if (b.team == Team.PLAYER) sfx("arrow")
+    }
+
+    private fun updateProjectiles(dt: Float) {
+        val it = projectiles.iterator()
+        while (it.hasNext()) {
+            val p = it.next()
+            val t = entityById(p.targetId)
+            if (t != null) { p.tx = t.x; p.ty = t.y }
+            val dx = p.tx - p.x
+            val dy = p.ty - p.y
+            val d = sqrt(dx * dx + dy * dy)
+            if (d <= 14f) {
+                if (t != null && !t.dead) {
+                    t.hp -= p.damage
+                    if (t.hp <= 0) { t.hp = 0; t.dead = true }
+                    if (t.team == Team.PLAYER) sfx("hit")
+                }
+                it.remove()
+                continue
+            }
+            p.x += dx / d * p.speed * dt
+            p.y += dy / d * p.speed * dt
+        }
+    }
+
+    private fun sfx(name: String) { onSound?.invoke(name) }
 
     // ------------------------------------------------------------ IA enemiga
 
@@ -826,14 +879,15 @@ class GameState {
                 m.targetId = target.id
             }
         }
+        sfx("raid")
         showMessage("¡Se acerca una incursión enemiga!")
     }
 
     private fun checkEnd() {
         val playerHas = entities.any { !it.dead && it.team == Team.PLAYER && it.isBuilding }
         val enemyHas = entities.any { !it.dead && it.team == Team.ENEMY && it.isBuilding }
-        if (!enemyHas) result = 1
-        else if (!playerHas) result = 2
+        if (!enemyHas) { if (result == 0) sfx("win"); result = 1 }
+        else if (!playerHas) { if (result == 0) sfx("lose"); result = 2 }
     }
 
 

@@ -3,6 +3,7 @@ package com.d4r005.ageofempire
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.RectF
+import android.media.MediaPlayer
 import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
@@ -16,6 +17,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     val state = GameState()
     private val renderer = Renderer(context, state)
     private val hud = Hud(state)
+    private val sound = SoundManager(context)
+    private var music: MediaPlayer? = null
     private var thread: GameThread? = null
 
     @Volatile private var surfaceReady = false
@@ -48,6 +51,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             state.startNewGame()
             deleteSave()
         }
+        state.onSound = { name -> sound.play(name) }
         if (!loadGame()) state.startNewGame()
     }
 
@@ -66,11 +70,36 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             thread?.running = true
             thread?.start()
         }
+        startMusic()
     }
 
     fun pause() {
         thread?.running = false
         thread = null
+        stopMusic()
+    }
+
+    // ------------------------------------------------------------- música
+
+    private fun startMusic() {
+        if (music != null) return
+        try {
+            val resId = context.resources.getIdentifier("music", "raw", context.packageName)
+            if (resId == 0) return
+            music = MediaPlayer.create(context, resId)?.apply {
+                isLooping = true
+                setVolume(0.35f, 0.35f)
+                start()
+            }
+        } catch (_: Exception) { }
+    }
+
+    private fun stopMusic() {
+        try {
+            music?.stop()
+        } catch (_: Exception) { }
+        music?.release()
+        music = null
     }
 
     // ------------------------------------------------------------- guardado
