@@ -22,6 +22,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        gameView.saveGame()
         gameView.pause()
     }
 

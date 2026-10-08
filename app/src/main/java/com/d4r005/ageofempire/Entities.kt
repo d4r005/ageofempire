@@ -20,6 +20,11 @@ class Entity(
     companion object {
         private val nextId = AtomicLong(1)
         fun newId(): Long = nextId.getAndIncrement()
+
+        /** Tras cargar una partida, asegura que los ids nuevos no choquen. */
+        fun syncNextId(above: Long) {
+            if (nextId.get() <= above) nextId.set(above + 1)
+        }
     }
 
     // Común
@@ -44,6 +49,11 @@ class Entity(
     // Recursos
     var amount = 0
     var resourceType: ResourceType? = null
+
+    // Orden de movimiento y animación
+    var path = ArrayList<Pair<Float, Float>>()
+    var pathFailed = false
+    var facing = 1
 
     // Edificios
     var construction = 1f      // 0..1, <1 = en construcción

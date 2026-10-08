@@ -303,7 +303,35 @@ class Renderer(private val context: Context, private val state: GameState) {
         paint.color = Color.argb(70, 0, 0, 0)
         canvas.drawOval(sx - r * 0.9f, sy + r * 0.35f, sx + r * 0.9f, sy + r * 1.05f, paint)
 
-        drawBitmapCentered(unitBitmap(e.kind, e.team), canvas, sx, sy - r * 0.5f, span / 2f, span / 2f)
+        // Animación: bob al caminar, balanceo al trabajar/talar, embestida al atacar
+        var bobY = 0f
+        var rot = 0f
+        var tilt = 0f
+        val t = state.time
+        when (e.state) {
+            UnitState.MOVING, UnitState.RETURNING -> {
+                bobY = abs(kotlin.math.sin(t * 10f + (e.id % 11).toFloat())) * 2.4f
+                tilt = kotlin.math.sin(t * 10f + (e.id % 11).toFloat()) * 3f
+            }
+            UnitState.GATHERING, UnitState.BUILDING -> {
+                rot = kotlin.math.sin(t * 7f + (e.id % 13).toFloat()) * 7f
+                bobY = (1f - abs(kotlin.math.sin(t * 7f + (e.id % 13).toFloat()))) * 1.2f
+            }
+            UnitState.ATTACKING -> {
+                bobY = kotlin.math.sin(t * 12f) * 1.4f
+                rot = kotlin.math.sin(t * 12f) * 2f
+            }
+            else -> { }
+        }
+        val bmp = unitBitmap(e.kind, e.team)
+        canvas.save()
+        canvas.translate(sx, sy - r * 0.5f - bobY * cam.zoom)
+        if (e.facing < 0) canvas.scale(-1f, 1f)
+        canvas.rotate(tilt + rot * 0.4f)
+        srcRectCache.set(0, 0, bmp.width, bmp.height)
+        dstRectF.set(-span / 2f, -span / 2f, span / 2f, span / 2f)
+        canvas.drawBitmap(bmp, srcRectCache, dstRectF, bitmapPaint)
+        canvas.restore()
 
         if (e.carryAmount > 0 && e.carryType != null) {
             paint.color = resourceColor(e.carryType)
@@ -324,11 +352,23 @@ class Renderer(private val context: Context, private val state: GameState) {
     }
 
     private fun drawSelectionRing(e: Entity, canvas: Canvas, sx: Float, sy: Float, r: Float) {
-        if (state.selectedId != e.id) return
+        val prim = state.selectedId == e.id
+        if (!prim && !state.selectedIds.contains(e.id)) return
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 3f
         paint.color = SELECTION_COLOR
         canvas.drawOval(sx - r, sy - r * 0.55f, sx + r, sy + r * 0.55f, paint)
+    }
+
+    fun drawSelectionBox(canvas: Canvas, box: android.graphics.RectF) {
+        paint.style = Paint.Style.FILL
+        paint.color = Color.argb(36, 58, 224, 110)
+        canvas.drawRect(box, paint)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 2f
+        paint.color = 0xFF3AE06A.toInt()
+        canvas.drawRect(box, paint)
+        paint.style = Paint.Style.FILL
     }
 
     private fun drawHpBarIfDamaged(e: Entity, canvas: Canvas, cx: Float, top: Float, width: Float) {

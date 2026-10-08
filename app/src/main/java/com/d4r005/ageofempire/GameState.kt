@@ -1,6 +1,10 @@
 package com.d4r005.ageofempire
 
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.PriorityQueue
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 import kotlin.random.Random
@@ -11,6 +15,8 @@ class GameState {
     var entities = ArrayList<Entity>()
     var tiles = IntArray(GameDef.MAP_W * GameDef.MAP_H)
     var selectedId = -1L
+    val selectedIds = LinkedHashSet<Long>()
+    var worldVersion = 0          // cambia cuando se (re)genera el mundo: el minimapa se refresca
     var buildMode: Kind? = null
     var message = ""
     var messageTimer = 0f
@@ -36,6 +42,7 @@ class GameState {
         }
         entities.removeAll { it.dead }
         if (selected() == null) selectedId = -1L
+        if (selectedIds.isNotEmpty() && selectedUnits().isEmpty()) selectedIds.clear()
 
         updateEnemyAi(dt)
         checkEnd()
@@ -46,8 +53,10 @@ class GameState {
     fun startNewGame() {
         entities = ArrayList()
         selectedId = -1L
+        selectedIds.clear()
         buildMode = null
         result = 0
+        worldVersion++
         time = 0f
         aiTimer = 25f
         raids = 0
@@ -175,6 +184,122 @@ class GameState {
         return tileAt(tx, ty) != GameDef.WATER
     }
 
+    // ------------------------------------------------------------ pathfinding
+
+    /** Tiles bloqueados: agua, huella de edificios y recursos grandes. */
+    private fun buildBlocked(): BooleanArray {
+        val w = GameDef.MAP_W; val h = GameDef.MAP_H
+        val blocked = BooleanArray(w * h)
+        for (i in 0 until w * h) blocked[i] = tiles[i] == GameDef.WATER
+        for (e in entities) {
+            if (e.dead) continue
+            if (e.isBuilding) {
+                val half = e.halfSize + 4f
+                tileRange(e.x, e.y, half) { tx, ty -> blocked[ty * w + tx] = true }
+            } else if (e.kind == Kind.TREE || e.kind == Kind.GOLD_MINE || e.kind == Kind.STONE_MINE) {
+                blocked[((e.y / GameDef.TILE).toInt().coerceIn(0, h - 1)) * w +
+                        (e.x / GameDef.TILE).toInt().coerceIn(0, w - 1)] = true
+            }
+        }
+        return blocked
+    }
+
+    private inline fun tileRange(cx: Float, cy: Float, half: Float, block: (Int, Int) -> Unit) {
+        val w = GameDef.MAP_W; val h = GameDef.MAP_H
+        val x0 = ((cx - half) / GameDef.TILE).toInt().coerceIn(0, w - 1)
+        val x1 = ((cx + half) / GameDef.TILE).toInt().coerceIn(0, w - 1)
+        val y0 = ((cy - half) / GameDef.TILE).toInt().coerceIn(0, h - 1)
+        val y1 = ((cy + half) / GameDef.TILE).toInt().coerceIn(0, h - 1)
+        for (ty in y0..y1) for (tx in x0..x1) block(tx, ty)
+    }
+
+    /**
+     * A* por tiles. Devuelve waypoints en coordenadas de mundo (centro de tile).
+     * Si el destino está bloqueado (recurso/edificio), la ruta termina en un tile
+     * adyacente y el resto del approach lo hace la lógica de cada unidad.
+     */
+    fun findPath(fromX: Float, fromY: Float, toX: Float, toY: Float): ArrayList<Pair<Float, Float>> {
+        val w = GameDef.MAP_W; val h = GameDef.MAP_H
+        val blocked = buildBlocked()
+        val sx = (fromX / GameDef.TILE).toInt().coerceIn(0, w - 1)
+        val sy = (fromY / GameDef.TILE).toInt().coerceIn(0, h - 1)
+        var gx = (toX / GameDef.TILE).toInt().coerceIn(0, w - 1)
+        var gy = (toY / GameDef.TILE).toInt().coerceIn(0, h - 1)
+        if (blocked[gy * w + gx]) {
+            val alt = nearestOpenAround(gx, gy, blocked) ?: return ArrayList()
+            gx = alt.first; gy = alt.second
+        }
+        if (blocked[sy * w + sx] || (sx == gx && sy == gy)) return ArrayList()
+
+        val gScore = IntArray(w * h) { Int.MAX_VALUE }
+        val parent = IntArray(w * h) { -1 }
+        val open = PriorityQueue<Int>(compareBy { gScore[it] + hcost(it, gx, gy, w) })
+        gScore[sy * w + sx] = 0
+        open.add(sy * w + sx)
+
+        var expanded = 0
+        val goalIdx = gy * w + gx
+        while (open.isNotEmpty() && expanded < 6000) {
+            val cur = open.poll()
+            if (cur == goalIdx) break
+            expanded++
+            val cx = cur % w; val cy = cur / w
+            for (dir in DIRS) {
+                val nx = cx + dir.first; val ny = cy + dir.second
+                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
+                val ni = ny * w + nx
+                if (blocked[ni]) continue
+                val ng = gScore[cur] + if (dir.first != 0 && dir.second != 0) 14 else 10
+                if (ng < gScore[ni]) {
+                    gScore[ni] = ng
+                    parent[ni] = cur
+                    open.add(ni)
+                }
+            }
+        }
+        if (parent[goalIdx] == -1 && goalIdx != sy * w + sx) return ArrayList()
+
+        // Reconstruir ruta (del goal al inicio) y suavizar quitando colineales
+        val rev = ArrayList<Int>()
+        var cur = goalIdx
+        while (cur != -1) { rev.add(cur); cur = parent[cur] }
+        rev.reverse()
+        val out = ArrayList<Pair<Float, Float>>()
+        var lastDx = 99; var lastDy = 99
+        for (i in 1 until rev.size) {
+            val p = rev[i]; val prev = rev[i - 1]
+            val dx = (p % w) - (prev % w); val dy = (p / w) - (prev / w)
+            if (out.isNotEmpty() && dx == lastDx && dy == lastDy) {
+                out[out.size - 1] = tileCenter(p % w, p / w)
+            } else {
+                out.add(tileCenter(p % w, p / w))
+            }
+            lastDx = dx; lastDy = dy
+        }
+        return out
+    }
+
+    private fun hcost(idx: Int, gx: Int, gy: Int, w: Int): Int {
+        val dx = abs(idx % w - gx); val dy = abs(idx / w - gy)
+        return (max(dx, dy) + min(dx, dy) / 2) * 10
+    }
+
+    private fun tileCenter(tx: Int, ty: Int): Pair<Float, Float> =
+        Pair((tx + 0.5f) * GameDef.TILE, (ty + 0.5f) * GameDef.TILE)
+
+    private fun nearestOpenAround(tx: Int, ty: Int, blocked: BooleanArray): Pair<Int, Int>? {
+        val w = GameDef.MAP_W; val h = GameDef.MAP_H
+        for (r in 1..4) {
+            for (dy in -r..r) for (dx in -r..r) {
+                if (max(abs(dx), abs(dy)) != r) continue
+                val nx = tx + dx; val ny = ty + dy
+                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
+                if (!blocked[ny * w + nx]) return Pair(nx, ny)
+            }
+        }
+        return null
+    }
+
     // ------------------------------------------------------------- spawns
 
     private fun spawnUnit(kind: Kind, team: Team, x: Float, y: Float): Entity {
@@ -226,6 +351,29 @@ class GameState {
     // ------------------------------------------------------------ consultas
 
     fun selected(): Entity? = entityById(selectedId)
+
+    /** Todas las unidades del jugador seleccionadas (para órdenes en grupo). */
+    fun selectedUnits(): List<Entity> =
+        selectedIds.mapNotNull { id -> entityById(id) }.filter { it.isUnit && it.team == Team.PLAYER }
+
+    fun selectSingle(e: Entity?) {
+        selectedIds.clear()
+        if (e != null && !e.dead) selectedIds.add(e.id)
+        selectedId = e?.id ?: -1L
+    }
+
+    /** Selección por caja: solo unidades propias. */
+    fun boxSelect(wx0: Float, wy0: Float, wx1: Float, wy1: Float) {
+        val x0 = min(wx0, wx1); val x1 = max(wx0, wx1)
+        val y0 = min(wy0, wy1); val y1 = max(wy0, wy1)
+        val inside = entities.filter {
+            !it.dead && it.isUnit && it.team == Team.PLAYER &&
+            it.x >= x0 && it.x <= x1 && it.y >= y0 && it.y <= y1
+        }
+        selectedIds.clear()
+        selectedIds.addAll(inside.map { it.id })
+        selectedId = inside.firstOrNull()?.id ?: -1L
+    }
 
     fun entityById(id: Long): Entity? = entities.firstOrNull { it.id == id && !it.dead }
 
@@ -338,10 +486,10 @@ class GameState {
 
     fun tapWorld(wx: Float, wy: Float) {
         if (result != 0) return
-        val sel = selected()
         val mode = buildMode
         if (mode != null) {
-            if (sel == null || sel.kind != Kind.VILLAGER) {
+            val builder = selected()
+            if (builder == null || builder.kind != Kind.VILLAGER || builder.team != Team.PLAYER) {
                 buildMode = null
                 showMessage("Selecciona un aldeano para construir")
                 return
@@ -352,47 +500,85 @@ class GameState {
             pay(cost)
             val b = spawnBuilding(mode, Team.PLAYER, wx / GameDef.TILE - 0.5f, wy / GameDef.TILE - 0.5f, 0f)
             buildMode = null
-            sel.state = UnitState.MOVING
-            sel.targetId = b.id
-            sel.goalX = b.x
-            sel.goalY = b.y
+            orderUnit(builder, wx, wy, b)
             showMessage("Construyendo...")
             return
         }
 
         val hit = findAt(wx, wy)
-        if (sel == null || !sel.isUnit) {
-            selectedId = hit?.id ?: -1L
+        val units = selectedUnits()
+        if (units.isEmpty()) {
+            selectSingle(hit)
             return
         }
+
         if (hit == null) {
-            sel.state = UnitState.MOVING
-            sel.targetId = -1L
-            sel.goalX = wx
-            sel.goalY = wy
+            // Mover en formación alrededor del punto
+            val offsets = formationOffsets(units.size)
+            for (i in units.indices) {
+                orderMove(units[i], wx + offsets[i].first, wy + offsets[i].second)
+            }
             return
         }
-        when {
-            hit.id == sel.id -> { }
-            hit.isResource && sel.kind == Kind.VILLAGER -> {
-                sel.state = UnitState.MOVING
-                sel.targetId = hit.id
-                sel.goalX = hit.x
-                sel.goalY = hit.y
-            }
-            hit.team != Team.NEUTRAL && hit.team != sel.team -> {
-                sel.state = UnitState.ATTACKING
-                sel.targetId = hit.id
-                sel.goalX = hit.x
-                sel.goalY = hit.y
-            }
-            else -> selectedId = hit.id
+
+        if (hit.team == Team.PLAYER) {
+            // Tocar algo propio lo selecciona
+            selectSingle(hit)
+            return
         }
+        // Orden a todo el grupo según el objetivo
+        for (u in units) {
+            when {
+                hit.isResource && u.kind == Kind.VILLAGER -> orderUnit(u, hit.x, hit.y, hit)
+                hit.team != Team.PLAYER -> {
+                    u.state = UnitState.ATTACKING
+                    u.targetId = hit.id
+                    u.path.clear(); u.pathFailed = false
+                }
+                hit.isBuilding && hit.construction < 1f && u.kind == Kind.VILLAGER -> orderUnit(u, hit.x, hit.y, hit)
+                else -> orderMove(u, wx, wy)
+            }
+        }
+    }
+
+    /** Orden de movimiento/ataque/colecta a un objetivo concreto. */
+    private fun orderUnit(u: Entity, wx: Float, wy: Float, target: Entity) {
+        u.state = UnitState.MOVING
+        u.targetId = target.id
+        u.goalX = wx; u.goalY = wy
+        u.path.clear(); u.pathFailed = false
+    }
+
+    private fun orderMove(u: Entity, wx: Float, wy: Float) {
+        u.state = UnitState.MOVING
+        u.targetId = -1L
+        u.goalX = wx; u.goalY = wy
+        u.path.clear(); u.pathFailed = false
+    }
+
+    /** Posiciones en anillo alrededor del punto para no apilar N unidades. */
+    private fun formationOffsets(n: Int): ArrayList<Pair<Float, Float>> {
+        val out = ArrayList<Pair<Float, Float>>()
+        out.add(Pair(0f, 0f))
+        var ring = 1
+        while (out.size < n) {
+            val r = ring
+            val step = 34f
+            for (i in 0 until r * 6) {
+                val a = i * (Math.PI * 2 / (r * 6))
+                out.add(Pair((r * step * Math.cos(a)).toFloat(), (r * step * Math.sin(a)).toFloat()))
+                if (out.size >= n) break
+            }
+            ring++
+        }
+        return out
     }
 
     fun startBuildMode(kind: Kind) {
         val sel = selected()
-        if (sel == null || sel.kind != Kind.VILLAGER) { showMessage("Selecciona un aldeano"); return }
+        if (sel == null || sel.kind != Kind.VILLAGER || sel.team != Team.PLAYER) {
+            showMessage("Selecciona un aldeano"); return
+        }
         if (!canAfford(GameDef.costOf(kind))) { showMessage("Recursos insuficientes"); return }
         buildMode = kind
     }
@@ -413,8 +599,13 @@ class GameState {
     }
 
     fun stopSelected() {
-        val sel = selected() ?: return
-        if (sel.isUnit) {
+        for (u in selectedUnits()) {
+            u.state = UnitState.IDLE
+            u.targetId = -1L
+            u.path.clear()
+        }
+        val sel = selected()
+        if (sel != null && sel.isUnit) {
             sel.state = UnitState.IDLE
             sel.targetId = -1L
         }
@@ -438,6 +629,7 @@ class GameState {
         val dy = gy - u.y
         val d = sqrt(dx * dx + dy * dy)
         if (d <= stopDist) return true
+        if (abs(dx) > 1f) u.facing = if (dx > 0) 1 else -1
         val step = min(d - stopDist, u.speed * dt)
         val nx = u.x + dx / d * step
         val ny = u.y + dy / d * step
@@ -453,13 +645,34 @@ class GameState {
         val gy = t?.y ?: u.goalY
         val stop = if (t != null) t.radius + u.radius + 4f else 6f
         val stopB = if (t != null && t.isBuilding) t.halfSize + u.radius + 6f else stop
-        if (moveTo(u, gx, gy, dt, maxOf(stop, stopB))) {
+        val stopDist = maxOf(stop, stopB)
+        if (sqrt((gx - u.x) * (gx - u.x) + (gy - u.y) * (gy - u.y)) <= stopDist) {
+            // llegó
             when {
                 t == null -> u.state = UnitState.IDLE
                 t.isResource -> { u.workTimer = 0f; u.state = UnitState.GATHERING }
                 t.isBuilding && t.construction < 1f -> u.state = UnitState.BUILDING
                 else -> u.state = UnitState.ATTACKING
             }
+            return
+        }
+        // sigue la ruta calculada
+        if (u.path.isNotEmpty()) {
+            val wp = u.path.first()
+            if (moveTo(u, wp.first, wp.second, dt, 8f)) u.path.removeAt(0)
+            return
+        }
+        if (u.pathFailed) {
+            moveTo(u, gx, gy, dt, stopDist)   // sin ruta posible: línea recta como antes
+            return
+        }
+        // primera vez: calcular A*
+        val route = findPath(u.x, u.y, gx, gy)
+        if (route.isEmpty()) {
+            u.pathFailed = true
+            moveTo(u, gx, gy, dt, stopDist)
+        } else {
+            u.path.addAll(route)
         }
     }
 
@@ -483,6 +696,7 @@ class GameState {
             if (node != null) {
                 u.state = UnitState.MOVING
                 u.targetId = node.id
+                u.path.clear(); u.pathFailed = false
             } else {
                 u.state = UnitState.IDLE
                 u.targetId = -1L
@@ -513,6 +727,7 @@ class GameState {
             if (node != null) {
                 u.state = UnitState.MOVING
                 u.targetId = node.id
+                u.path.clear(); u.pathFailed = false
             } else {
                 u.state = UnitState.IDLE
                 u.targetId = -1L
@@ -619,5 +834,125 @@ class GameState {
         val enemyHas = entities.any { !it.dead && it.team == Team.ENEMY && it.isBuilding }
         if (!enemyHas) result = 1
         else if (!playerHas) result = 2
+    }
+
+
+    // ------------------------------------------------------------- guardado
+
+    fun toJsonString(): String {
+        val root = JSONObject()
+        root.put("v", 1)
+        root.put("time", time.toDouble())
+        root.put("raids", raids)
+        root.put("aiTimer", aiTimer.toDouble())
+        root.put("sel", selectedId)
+        root.put("camX", camera.x.toDouble())
+        root.put("camY", camera.y.toDouble())
+        root.put("zoom", camera.zoom.toDouble())
+        val res = JSONObject()
+        for ((k, v) in resources) res.put(k.name, v)
+        root.put("res", res)
+        val tl = JSONArray()
+        for (t in tiles) tl.put(t)
+        root.put("tiles", tl)
+        val es = JSONArray()
+        for (e in entities) {
+            val o = JSONObject()
+            o.put("id", e.id)
+            o.put("k", e.kind.name); o.put("t", e.team.name)
+            o.put("x", e.x.toDouble()); o.put("y", e.y.toDouble())
+            o.put("hp", e.hp); o.put("mhp", e.maxHp)
+            o.put("r", e.radius.toDouble()); o.put("hs", e.halfSize.toDouble())
+            o.put("st", e.state.name); o.put("tid", e.targetId)
+            o.put("gx", e.goalX.toDouble()); o.put("gy", e.goalY.toDouble())
+            o.put("cd", e.attackCd.toDouble())
+            o.put("ct", e.carryType?.name ?: "")
+            o.put("ca", e.carryAmount)
+            o.put("wt", e.workTimer.toDouble())
+            o.put("am", e.amount)
+            o.put("rt", e.resourceType?.name ?: "")
+            o.put("con", e.construction.toDouble())
+            o.put("tt", e.trainTimer.toDouble())
+            val q = JSONArray()
+            for (k in e.trainQueue) q.put(k.name)
+            o.put("tq", q)
+            es.put(o)
+        }
+        root.put("ent", es)
+        return root.toString()
+    }
+
+    fun loadFromString(json: String): Boolean {
+        try {
+            val root = JSONObject(json)
+            if (root.optInt("v") != 1) return false
+            time = root.getDouble("time").toFloat()
+            raids = root.getInt("raids")
+            aiTimer = root.getDouble("aiTimer").toFloat()
+            val res = root.getJSONObject("res")
+            resources.clear()
+            for (key in res.keys()) resources[ResourceType.valueOf(key)] = res.getInt(key)
+
+            val tl = root.getJSONArray("tiles")
+            require(tl.length() == tiles.size)
+            for (i in 0 until tl.length()) tiles[i] = tl.getInt(i)
+
+            entities = ArrayList()
+            val es = root.getJSONArray("ent")
+            var maxId = 0L
+            for (i in 0 until es.length()) {
+                val o = es.getJSONObject(i)
+                val e = Entity(
+                    o.getLong("id"),
+                    Kind.valueOf(o.getString("k")),
+                    Team.valueOf(o.getString("t")),
+                    o.getDouble("x").toFloat(),
+                    o.getDouble("y").toFloat()
+                )
+                maxId = max(maxId, e.id)
+                e.hp = o.getInt("hp"); e.maxHp = o.getInt("mhp")
+                e.radius = o.getDouble("r").toFloat()
+                e.halfSize = o.getDouble("hs").toFloat()
+                e.state = UnitState.valueOf(o.getString("st"))
+                e.targetId = o.getLong("tid")
+                e.goalX = o.getDouble("gx").toFloat(); e.goalY = o.getDouble("gy").toFloat()
+                e.attackCd = o.getDouble("cd").toFloat()
+                val ct = o.getString("ct"); e.carryType = if (ct.isEmpty()) null else ResourceType.valueOf(ct)
+                e.carryAmount = o.getInt("ca")
+                e.workTimer = o.getDouble("wt").toFloat()
+                e.amount = o.getInt("am")
+                val rt = o.getString("rt"); e.resourceType = if (rt.isEmpty()) null else ResourceType.valueOf(rt)
+                e.construction = o.getDouble("con").toFloat()
+                e.trainTimer = o.getDouble("tt").toFloat()
+                val q = o.getJSONArray("tq")
+                for (j in 0 until q.length()) e.trainQueue.add(Kind.valueOf(q.getString(j)))
+                e.speed = if (e.kind == Kind.VILLAGER) 65f else if (e.kind == Kind.MILITIA) 75f else 0f
+                e.damage = when (e.kind) { Kind.VILLAGER -> 3; Kind.MILITIA -> 8; else -> 0 }
+                e.dead = false
+                entities.add(e)
+            }
+            Entity.syncNextId(maxId)
+            selectedId = root.getLong("sel")
+            selectedIds.clear()
+            if (selectedId != -1L) selectedIds.add(selectedId)
+            camera.x = root.getDouble("camX").toFloat()
+            camera.y = root.getDouble("camY").toFloat()
+            camera.zoom = root.getDouble("zoom").toFloat()
+            camera.clamp()
+            buildMode = null
+            result = 0
+            message = ""; messageTimer = 0f
+            worldVersion++
+            return true
+        } catch (e: Exception) {
+            return false
+        }
+    }
+
+    companion object {
+        val DIRS = listOf(
+            Pair(1, 0), Pair(-1, 0), Pair(0, 1), Pair(0, -1),
+            Pair(1, 1), Pair(1, -1), Pair(-1, 1), Pair(-1, -1)
+        )
     }
 }

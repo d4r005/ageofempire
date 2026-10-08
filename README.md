@@ -2,7 +2,7 @@
 
 Un juego de estrategia en tiempo real (RTS) para Android inspirado en Age of Empires, escrito 100% en Kotlin nativo, sin dependencias externas.
 
-## Estado: v0.3.0 — gráficos mejorados (estilo AoE2)
+## Estado: v0.4.0 — jugabilidad móvil: multiselección, minimapa, A* y guardado
 
 - **v0.3.0**: pasto con 3 variantes y relieve, agua animada, costas con borde mojado y espuma, árboles más grandes con 3 variantes, edificios isométricos y unidades con volumen, orden de dibujo por profundidad y viñeteado
 - Mapa de tiles generado aleatoriamente (pasto, agua, arena) de 64×48, ahora con **texturas reales** en lugar de colores planos
@@ -34,10 +34,14 @@ Instala la APK en tu teléfono o usa un emulador.
 | Gesto | Acción |
 |---|---|
 | Tap sobre una unidad/edificio/recurso | Seleccionar |
-| Tap en el suelo con una unidad seleccionada | Mover / atacar / recolectar según el objetivo |
+| Pulsación larga + arrastrar | Caja de selección (multiselección) |
+| Tap en el suelo con unidades seleccionadas | Mover en formación / atacar / recolectar |
 | Arrastrar con un dedo | Mover cámara |
 | Pellizco con dos dedos | Zoom |
+| Tap o arrastre en el minimapa (arriba a la derecha) | Mover la cámara |
 | Botones inferiores | Construir, entrenar, detener |
+
+**Guardado automático**: la partida se guarda al cerrar la app y se recupera al abrirla. El botón «Nuevo» en la barra superior empieza una partida fresca.
 
 ## Flujo de juego
 
@@ -51,15 +55,16 @@ Instala la APK en tu teléfono o usa un emulador.
 
 - [x] Sprites ilustrados para edificios, unidades y recursos
 - [x] Orientación vertical
-- [ ] Animaciones (caminar, recolectar, atacar) en lugar de sprite estático
+- [x] Animaciones básicas (bob al caminar, balanceo al recolectar, giro según dirección)
+- [x] Pathfinding A* completo (evita agua, edificios y bosques)
+- [x] Multiselección por caja (pulsación larga + arrastrar) y órdenes en formación
+- [x] Guardado automático de partida
+- [x] Minimapa táctil
+- [ ] Animaciones completas de sprite sheet
 - [ ] Sonido y música
 - [ ] Más edificios (molino, granja, murallas, torres)
 - [ ] Más unidades (arqueros, caballería)
 - [ ] Edades / tecnologías
-- [ ] Pathfinding A* completo
-- [ ] Multiselección y arrastre de caja de selección
-- [ ] Guardado de partida
-- [ ] Minimapa
 
 ## Estructura del código
 
